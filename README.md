@@ -106,6 +106,49 @@ PORT=3000 HOSTNAME=0.0.0.0 pnpm start
 - 容器中的 Node 运行时
 - 反向代理后的内部应用服务
 
+## Docker 部署
+
+仓库已提供多阶段构建 `Dockerfile`，会在构建镜像时自动读取项目根目录下的 `.env.production` 并执行 `pnpm build`。
+
+1. 确认生产环境变量
+
+```bash
+cat .env.production
+```
+
+示例：
+
+```bash
+NEXT_PUBLIC_API_URL=https://your-api.example.com
+```
+
+2. 构建镜像
+
+```bash
+docker build -t scaffold-web .
+```
+
+3. 启动容器
+
+```bash
+docker run -d \
+  --name scaffold-web \
+  -p 3000:3000 \
+  scaffold-web
+```
+
+4. 访问服务
+
+```text
+http://localhost:3000
+```
+
+说明：
+
+- 容器内默认监听 `0.0.0.0:3000`
+- 如果修改了 `.env.production` 中的 `NEXT_PUBLIC_API_URL`，需要重新执行 `docker build`
+- `NEXT_PUBLIC_*` 变量会参与前端构建，因此不建议只在 `docker run` 阶段临时覆盖它来替代重新构建
+
 ## 生产部署建议
 
 ### 方案一：直接以 Node 进程运行
