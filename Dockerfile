@@ -22,18 +22,12 @@ COPY . .
 
 RUN pnpm build
 
-FROM node:20-alpine AS runner
+FROM busybox:1.36.1-musl AS runner
 
-WORKDIR /app
+WORKDIR /www
 
-ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
+COPY --from=builder /app/out ./
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 80
 
-EXPOSE 3000
-
-CMD ["node", "server.js"]
+CMD ["httpd", "-f", "-v", "-p", "3000", "-h", "/www"]
