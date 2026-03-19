@@ -22,7 +22,7 @@
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-生产环境可通过 `.env.production` 或进程环境变量注入：
+生产环境可通过 `.env.production` 或构建命令执行前的进程环境变量注入：
 
 ```bash
 NEXT_PUBLIC_API_URL=https://your-api.example.com
@@ -32,6 +32,8 @@ NEXT_PUBLIC_API_URL=https://your-api.example.com
 
 - 这里填写的是后端根地址，不要额外拼接 `/api/v1`
 - 当前前端代码会自动请求 `${NEXT_PUBLIC_API_URL}/api/v1/users`
+- `NEXT_PUBLIC_*` 变量会参与静态构建，修改后需要重新执行 `pnpm build` 或重新构建 Docker 镜像
+- 当前仓库的生产主形态是“静态导出 + 静态服务器托管”，不是长期依赖 `next start` 的 SSR/Node 服务
 
 ## 本地开发与调试
 
@@ -73,7 +75,7 @@ pnpm build
 - 如果页面出现空白或接口错误，先确认 `NEXT_PUBLIC_API_URL` 是否指向正确的后端根地址
 - 如果需要对照接口契约，查看 `http://localhost:8080/swagger/swagger.json` 或后端 Swagger UI
 
-## 生产构建与启动
+## 生产构建与静态发布
 
 1. 安装依赖
 
@@ -88,27 +90,32 @@ export NODE_ENV=production
 export NEXT_PUBLIC_API_URL=https://your-api.example.com
 ```
 
-3. 构建生产包
+也可以将同样的值写入 `.env.production` 后再执行构建。
+
+3. 构建静态产物
 
 ```bash
 pnpm build
 ```
 
-4. 启动生产服务
+4. 确认导出产物
 
 ```bash
-PORT=3000 HOSTNAME=0.0.0.0 pnpm start
+ls out
 ```
 
-启动后默认由 Next.js Node 进程提供服务，适合部署到：
+构建完成后，部署所需的前端静态资源位于 `out/` 目录。
 
-- Linux 云主机
-- 容器中的 Node 运行时
-- 反向代理后的内部应用服务
+说明：
+
+- `next.config.js` 已启用 `output: "export"`，因此生产产物以静态文件为主
+- `scripts/postbuild-static-export.sh` 会额外生成 `out/index.html`，用于将根路径重定向到 `/users/`
+- 生产发布时应托管 `out/` 目录，而不是默认将 `pnpm start` 作为主运行方式
+- 如果修改了 `NEXT_PUBLIC_API_URL`，需要重新构建 `out/`
 
 ## Docker 部署
 
-仓库已提供多阶段构建 `Dockerfile`，会在构建镜像时自动读取项目根目录下的 `.env.production` 并执行 `pnpm build`。
+Docker 是当前仓库最贴近实际生产形态的部署方式。现有 `Dockerfile` 会执行静态构建，并在最终阶段使用 BusyBox `httpd` 托管 `out/` 目录。
 
 1. 确认生产环境变量
 
@@ -146,41 +153,49 @@ http://localhost:3000
 说明：
 
 - 容器内默认监听 `0.0.0.0:3000`
+- 镜像内托管的是静态导出产物，而不是运行中的 Next.js Node 服务
 - 如果修改了 `.env.production` 中的 `NEXT_PUBLIC_API_URL`，需要重新执行 `docker build`
 - `NEXT_PUBLIC_*` 变量会参与前端构建，因此不建议只在 `docker run` 阶段临时覆盖它来替代重新构建
 
 ## 生产部署建议
 
-### 方案一：直接以 Node 进程运行
+### 方案一：容器化静态托管
 
-适合单机或简单部署。
+适合已有容器平台、云主机或内部发布平台，推荐优先采用。
+
+示例流程：
+
+```bash
+docker build -t scaffold-web .
+docker run -d --name scaffold-web -p 3000:3000 scaffold-web
+```
+
+如果前面还有网关、Nginx、Caddy 或云负载均衡，可继续转发到该静态容器。
+
+### 方案二：服务器静态目录托管
+
+适合已有 Nginx、Caddy、对象存储或 CDN 的环境。
 
 示例流程：
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-PORT=3000 HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL=https://your-api.example.com pnpm start
+rsync -av out/ /var/www/scaffold-web/
 ```
 
-建议再由 Nginx、Caddy 或云负载均衡转发到该进程。
+之后再由静态服务器指向该目录提供访问。
 
-### 方案二：使用进程管理器托管
+补充说明：
 
-适合需要自动拉起和日志管理的服务器。
-
-示例 `systemd` 启动命令：
-
-```bash
-/usr/bin/env PORT=3000 HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL=https://your-api.example.com pnpm start
-```
-
-需要确保服务启动前已经执行过 `pnpm install --frozen-lockfile` 和 `pnpm build`。
+- 当前仓库虽然保留了 `pnpm start` 脚本，但它不是本项目文档推荐的默认生产发布路径
+- 本项目更适合被视为“静态前端 + 外部后端 API”的部署模型
 
 ## 发布前检查清单
 
 - `pnpm lint` 通过
 - `pnpm build` 通过
+- `out/` 目录已生成
 - `NEXT_PUBLIC_API_URL` 已指向正确后端
 - 后端已开放 `/api/v1/users` 接口
 - 浏览器中可正常打开 `/users` 页面并完成增删改查
@@ -201,7 +216,8 @@ PORT=3000 HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL=https://your-api.example.com pnpm
 先检查：
 
 - 生产环境变量是否仍然指向了 `localhost`
-- 反向代理是否正确转发到前端 Node 进程
+- 静态站点发布时是否使用了最新构建出的 `out/` 目录
+- 静态服务器是否正确托管了 `/users/` 路径
 - 后端线上地址是否可访问 `/api/v1/users`
 
 ### 3. 修改环境变量后不生效
@@ -210,5 +226,10 @@ PORT=3000 HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL=https://your-api.example.com pnpm
 
 ```bash
 pnpm build
-pnpm start
+```
+
+如果你使用 Docker 发布，则需要重新执行：
+
+```bash
+docker build -t scaffold-web .
 ```
