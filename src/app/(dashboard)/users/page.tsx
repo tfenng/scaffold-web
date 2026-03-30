@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getApiErrorMessage, userApi } from "@/lib/api";
 import { UserDialog } from "@/components/users/user-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -22,6 +23,8 @@ export default function UsersPage() {
   const [filters, setFilters] = useState<UserListFilter>({ page: 1, page_size: 20 });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<number | null>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["users", filters],
@@ -132,9 +135,8 @@ export default function UsersPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => {
-                          if (confirm("Are you sure?")) {
-                            deleteMutation.mutate(user.id);
-                          }
+                          setPendingDeleteId(user.id);
+                          setConfirmDialogOpen(true);
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -174,6 +176,23 @@ export default function UsersPage() {
         open={dialogOpen}
         onOpenChange={handleDialogClose}
         userId={editingUser}
+      />
+
+      <ConfirmDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        title="Delete User"
+        description="Are you sure you want to delete this user? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDeleting={deleteMutation.isPending}
+        onConfirm={() => {
+          if (pendingDeleteId !== null) {
+            deleteMutation.mutate(pendingDeleteId);
+            setConfirmDialogOpen(false);
+            setPendingDeleteId(null);
+          }
+        }}
       />
     </div>
   );
