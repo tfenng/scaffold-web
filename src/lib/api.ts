@@ -21,11 +21,19 @@ type CreateUserPayload = {
 };
 
 type UpdateUserPayload = {
-  email?: string;
+  email?: string | null;
   name: string;
   used_name?: string;
   company?: string;
-  birth?: string;
+  birth?: string | null;
+};
+
+type PatchUserPayload = {
+  email?: string | null;
+  name?: string;
+  used_name?: string;
+  company?: string;
+  birth?: string | null;
 };
 
 export const userApi = {
@@ -39,6 +47,12 @@ export const userApi = {
 
   update: (id: number, data: UpdateUserPayload) =>
     api.put<UserDetailEnvelope>(`/api/v1/users/${id}`, data),
+
+  put: (id: number, data: UpdateUserPayload) =>
+    api.put<UserDetailEnvelope>(`/api/v1/users/${id}`, data),
+
+  patch: (id: number, data: PatchUserPayload) =>
+    api.patch<UserDetailEnvelope>(`/api/v1/users/${id}`, data),
 
   delete: (id: number) => api.delete<void>(`/api/v1/users/${id}`),
 };

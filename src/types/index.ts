@@ -1,11 +1,11 @@
 export interface User {
   id: number;
   uid: string;
-  email?: string;
+  email?: string | null;
   name: string;
   used_name: string;
   company: string;
-  birth?: string;
+  birth?: string | null;
   created_at: string;
   updated_at: string;
 }

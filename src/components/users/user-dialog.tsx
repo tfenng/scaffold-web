@@ -5,8 +5,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getApiError, getApiErrorMessage, userApi } from "@/lib/api";
-import { createUserSchema, updateUserSchema, type CreateUserInput, type UpdateUserInput } from "@/schemas/user-schema";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  createUserSchema,
+  updateUserSchema,
+  type CreateUserInput,
+} from "@/schemas/user-schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,11 +38,24 @@ type UserFormValues = {
   birth?: string;
 };
 
+type UserPatchPayload = {
+  email?: string | null;
+  name?: string;
+  used_name?: string;
+  company?: string;
+  birth?: string | null;
+};
+
 const formFieldNames = ["uid", "email", "name", "used_name", "company", "birth"] as const;
 
 const toOptionalString = (value?: string) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+};
+
+const toNullableString = (value?: string) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 };
 
 const normalizeCreateInput = (data: CreateUserInput) => ({
@@ -44,13 +67,34 @@ const normalizeCreateInput = (data: CreateUserInput) => ({
   birth: toOptionalString(data.birth),
 });
 
-const normalizeUpdateInput = (data: UpdateUserInput) => ({
-  email: toOptionalString(data.email),
-  name: data.name.trim(),
-  used_name: toOptionalString(data.used_name),
-  company: toOptionalString(data.company),
-  birth: toOptionalString(data.birth),
-});
+const buildPatchPayload = (
+  data: UserFormValues,
+  dirtyFields: Partial<Record<keyof UserFormValues, boolean>>
+) => {
+  const payload: UserPatchPayload = {};
+
+  if (dirtyFields.name) {
+    payload.name = data.name.trim();
+  }
+
+  if (dirtyFields.email) {
+    payload.email = toNullableString(data.email);
+  }
+
+  if (dirtyFields.used_name) {
+    payload.used_name = data.used_name?.trim() ?? "";
+  }
+
+  if (dirtyFields.company) {
+    payload.company = data.company?.trim() ?? "";
+  }
+
+  if (dirtyFields.birth) {
+    payload.birth = toNullableString(data.birth);
+  }
+
+  return payload;
+};
 
 export function UserDialog({ open, onOpenChange, userId }: UserDialogProps) {
   const queryClient = useQueryClient();
@@ -73,7 +117,7 @@ export function UserDialog({ open, onOpenChange, userId }: UserDialogProps) {
     reset,
     setError,
     clearErrors,
-    formState: { errors },
+    formState: { errors, dirtyFields, isDirty },
   } = useForm<UserFormValues>({
     resolver: zodResolver(isEdit ? updateUserSchema : createUserSchema),
   });
@@ -141,7 +185,7 @@ export function UserDialog({ open, onOpenChange, userId }: UserDialogProps) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: UpdateUserInput) => userApi.update(userId!, normalizeUpdateInput(data)),
+    mutationFn: (data: UserPatchPayload) => userApi.patch(userId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["user", userId] });
@@ -158,11 +202,19 @@ export function UserDialog({ open, onOpenChange, userId }: UserDialogProps) {
     },
   });
 
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isEditBlocked = isEdit && (isUserLoading || isUserError || !isDirty);
+
   const onSubmit = (data: UserFormValues) => {
     clearErrors();
 
     if (isEdit) {
-      updateMutation.mutate(data as UpdateUserInput);
+      const payload = buildPatchPayload(data, dirtyFields);
+      if (Object.keys(payload).length === 0) {
+        return;
+      }
+
+      updateMutation.mutate(payload);
     } else {
       createMutation.mutate(data as CreateUserInput);
     }
@@ -298,13 +350,9 @@ export function UserDialog({ open, onOpenChange, userId }: UserDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={
-                createMutation.isPending ||
-                updateMutation.isPending ||
-                (isEdit && (isUserLoading || isUserError))
-              }
+              disabled={isSaving || isEditBlocked}
             >
-              {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+              {isSaving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>
