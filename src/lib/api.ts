@@ -7,8 +7,13 @@ import type {
   UserListFilter,
 } from "@/types";
 
+// An empty base URL keeps requests same-origin, which is what the single
+// binary needs (API and web UI share one origin). Only set
+// NEXT_PUBLIC_API_URL when the frontend is served from a different origin.
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080",
+  baseURL: apiBaseUrl,
 });
 
 type CreateUserPayload = {
